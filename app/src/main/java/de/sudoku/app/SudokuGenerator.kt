@@ -5,7 +5,8 @@ import kotlin.random.Random
 enum class Difficulty(val label: String, val clues: Int) {
     EASY("Leicht", 40),
     MEDIUM("Mittel", 32),
-    HARD("Schwer", 26)
+    HARD("Schwer", 26),
+    CUSTOM("Eigene", 34)
 }
 
 class Puzzle(val solution: IntArray, val givens: IntArray)
@@ -17,14 +18,17 @@ class Puzzle(val solution: IntArray, val givens: IntArray)
  */
 object SudokuGenerator {
 
-    fun generate(difficulty: Difficulty, random: Random = Random.Default): Puzzle {
+    fun generate(difficulty: Difficulty, random: Random = Random.Default): Puzzle =
+        generate(difficulty.clues, random)
+
+    fun generate(clueTarget: Int, random: Random = Random.Default): Puzzle {
         val solution = IntArray(81)
         fillGrid(solution, random)
 
         val puzzle = solution.copyOf()
         var clues = 81
         for (pos in (0 until 81).shuffled(random)) {
-            if (clues <= difficulty.clues) break
+            if (clues <= clueTarget) break
             val backup = puzzle[pos]
             puzzle[pos] = 0
             if (countSolutions(puzzle.copyOf(), 2) != 1) {
