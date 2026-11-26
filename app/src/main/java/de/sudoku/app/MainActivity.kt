@@ -53,6 +53,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -257,6 +258,7 @@ fun Header(look: Look, s: Settings, elapsedMs: Long, onSettings: () -> Unit) {
                     .clip(CircleShape)
                     .background(look.surface)
                     .border(1.dp, look.edge, CircleShape)
+                    .testTag("settings")
                     .clickable(onClick = onSettings),
                 contentAlignment = Alignment.Center
             ) {
@@ -430,6 +432,7 @@ fun Cell(
 
     Box(
         modifier = modifier
+            .testTag("cell_$index")
             .background(bg)
             .then(if (same) Modifier.border(2.dp, look.ring) else Modifier)
             .then(if (ringSel) Modifier.border(3.dp, look.user) else Modifier)
@@ -522,12 +525,12 @@ fun Tools(look: Look, s: Settings, state: GameState, vm: GameViewModel, buzz: ()
     val labels = s.bool("toolLabels")
     val hintsLeft = vm.hintsLeft()
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (s.bool("showUndo")) ToolButton(Modifier.weight(1f), look, "↶", "Zurück", labels, false, true) { vm.undo(); buzz() }
-        if (s.bool("showErase")) ToolButton(Modifier.weight(1f), look, "⌫", "Löschen", labels, false, true) { vm.erase(); buzz() }
-        if (s.bool("showNotesBtn")) ToolButton(Modifier.weight(1f), look, "✎", "Notizen", labels, state.notesMode, true) { vm.toggleNotes(); buzz() }
+        if (s.bool("showUndo")) ToolButton(Modifier.weight(1f).testTag("tool_undo"), look, "↶", "Zurück", labels, false, true) { vm.undo(); buzz() }
+        if (s.bool("showErase")) ToolButton(Modifier.weight(1f).testTag("tool_erase"), look, "⌫", "Löschen", labels, false, true) { vm.erase(); buzz() }
+        if (s.bool("showNotesBtn")) ToolButton(Modifier.weight(1f).testTag("tool_notes"), look, "✎", "Notizen", labels, state.notesMode, true) { vm.toggleNotes(); buzz() }
         if (s.bool("showHintBtn")) {
             val label = if (hintsLeft != null) "Tipp ($hintsLeft)" else "Tipp"
-            ToolButton(Modifier.weight(1f), look, "✦", label, labels, false, hintsLeft != 0) { vm.hint(); buzz() }
+            ToolButton(Modifier.weight(1f).testTag("tool_hint"), look, "✦", label, labels, false, hintsLeft != 0) { vm.hint(); buzz() }
         }
     }
 }
@@ -594,6 +597,7 @@ fun Key(modifier: Modifier, look: Look, state: GameState, d: Int, onKey: (Int) -
 
     Box(
         modifier = modifier
+            .testTag("key_$d")
             .height(look.kh.dp)
             .alpha(if (hidden) 0f else 1f)
             .clip(shape)
