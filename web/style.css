@@ -204,8 +204,16 @@ input[type="range"] { width: 100%; margin-top: 10px; accent-color: var(--user); 
 @media (max-width: 380px) {
   .app { padding-left: 10px; padding-right: 10px; }
   .key { font-size: 22px; }
-  .word { font-size: 26px; }
+  .word { font-size: 24px; }
+  .brand, .header-right { gap: 6px; }
+  .round { width: 36px; height: 36px; font-size: 18px; }
+  .clock { padding: 6px 9px; font-size: 14px; }
 }
+@media (max-width: 340px) {
+  .mark { display: none; }
+}
+.brand { min-width: 0; }
+.word { white-space: nowrap; overflow: hidden; }
 
 /* ---------- Startmenü ---------- */
 .menu {
