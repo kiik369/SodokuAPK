@@ -8,6 +8,9 @@ on:
       - '.github/workflows/web.yml'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -76,3 +79,17 @@ jobs:
           name: smoke-test
           path: smoke/
           if-no-files-found: ignore
+
+      - name: Release mit der APK veröffentlichen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk sudoku.apk
+          gh release create "v0.1.${{ github.run_number }}" sudoku.apk \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "Sudoku 0.1.${{ github.run_number }}" \
+            --latest \
+            --notes "Automatisch gebaut und getestet (Unit-Tests, UI-Tests und Smoke-Test im Emulator).
+
+          **Installieren:** sudoku.apk aufs Handy laden und antippen. Beim ersten Mal muss die Installation aus unbekannten Quellen erlaubt werden. Neue Versionen lassen sich einfach darüber installieren, der Spielstand bleibt erhalten."

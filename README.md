@@ -12,6 +12,12 @@ Einfache Sudoku-App für Android (Kotlin + Jetpack Compose).
 - Startmenü zur Wahl der Schwierigkeit; „Weiterspielen“ auch nach einem Neustart der App
 - Animationen: Welle bei fertiger Zeile, Spalte oder Block, große Welle beim Sieg, Aufploppen und Wackeln bei Eingaben (aus, wenn Animationen im System abgeschaltet sind)
 
+## App herunterladen
+
+**[sudoku.apk herunterladen](https://github.com/kiik369/SodokuAPK/releases/latest/download/sudoku.apk)** (immer die neueste Version)
+
+Alle Versionen stehen unter [Releases](https://github.com/kiik369/SodokuAPK/releases). Jeder Push auf `main` baut die App, testet sie im Emulator und veröffentlicht sie als neues Release. Zum Installieren die APK auf dem Handy antippen und beim ersten Mal die Installation aus unbekannten Quellen erlauben. Neue Versionen lassen sich über die alte installieren, der Spielstand bleibt erhalten.
+
 ## Im Browser spielen
 
 Die Web-Version liegt in `web/` und wird bei jedem Push auf `main` automatisch getestet und veröffentlicht:

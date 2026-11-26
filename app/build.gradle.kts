@@ -4,16 +4,30 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// In GitHub Actions zählt die Versionsnummer mit jedem Build hoch, damit Updates sich installieren lassen
+val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+
 android {
     namespace = "de.sudoku.app"
     compileSdk = 35
+
+    // Fester Debug-Schlüssel (Standard-Passwörter von Android). So hat jede gebaute APK dieselbe
+    // Signatur, und eine neue Version lässt sich über die alte installieren.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
 
     defaultConfig {
         applicationId = "de.sudoku.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1"
+        versionCode = buildNumber
+        versionName = "0.1.$buildNumber"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
