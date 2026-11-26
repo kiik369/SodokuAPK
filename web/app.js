@@ -36,8 +36,8 @@ const CATEGORIES = [
   {
     title: 'Fehler und Tipps', defs: [
       c('errMode', 'Fehler erkennen', 'solution', [['solution', 'Gegen Lösung'], ['rules', 'Nur Regelverstöße']]),
-      s('maxMistakes', 'Fehlerlimit', 0, 0, 10, 1, '', '0 = unbegrenzt, danach ist das Spiel verloren'),
-      t('showMist', 'Fehlerzähler anzeigen', false),
+      s('maxMistakes', 'Fehlerlimit bei „Eigene“', 0, 0, 10, 1, '', 'Leicht 5, Mittel 3, Schwer 1 Fehler. 0 = unbegrenzt'),
+      t('showMist', 'Fehlerzähler anzeigen', true),
       s('hintLimit', 'Tipp-Limit', 0, 0, 10, 1, '', '0 = unbegrenzt'),
       c('hintMode', 'Tipp-Verhalten', 'fill', [['fill', 'Ziffer eintragen'], ['show', 'Feld nur zeigen']]),
     ],
@@ -421,7 +421,7 @@ function render() {
   }
 
   $('open').textContent = `Noch ${g.open} offen`;
-  const max = Number(setting('maxMistakes'));
+  const max = g.mistakeLimit();
   const mist = $('mistakes');
   mist.hidden = !setting('showMist');
   mist.textContent = `Fehler: ${g.mistakes}${max > 0 ? ` von ${max}` : ''}`;
@@ -468,11 +468,10 @@ function showResultIfNeeded() {
   if (state === 'done') {
     $('result-title').textContent = 'Geschafft.';
     $('result-text').textContent = `Gelöst in ${formatTime(currentElapsed())} mit ${game.mistakes} Fehlern und ${game.hints} Tipps.`;
-    $('result-undo').hidden = true;
   } else {
+    const limit = game.mistakeLimit();
     $('result-title').textContent = 'Zu viele Fehler.';
-    $('result-text').textContent = `Das Fehlerlimit von ${setting('maxMistakes')} ist erreicht.`;
-    $('result-undo').hidden = false;
+    $('result-text').textContent = `${limit === 1 ? 'Ein Fehler ist' : `${limit} Fehler sind`} bei ${DIFFICULTIES[game.difficulty].label} erlaubt. Starte ein neues Spiel.`;
   }
   if (!dlg.open) dlg.showModal();
 }
@@ -497,10 +496,6 @@ $('confirm-ok').addEventListener('click', () => {
 $('result-new').addEventListener('click', () => {
   $('result').close();
   newGame(game.difficulty);
-});
-$('result-undo').addEventListener('click', () => {
-  $('result').close();
-  act((g) => g.undo());
 });
 $('result').addEventListener('cancel', (e) => e.preventDefault());
 $('result-menu').addEventListener('click', () => {
@@ -532,7 +527,9 @@ function showMenu() {
   for (const b of menuList.children) {
     const key = b.dataset.key;
     const clues = key === 'CUSTOM' ? Number(setting('customClues')) : DIFFICULTIES[key].clues;
-    b.querySelector('.mi-sub').textContent = `${clues} Vorgaben`;
+    const max = DIFFICULTIES[key].maxMistakes ?? Number(setting('maxMistakes'));
+    const errors = max === 0 ? 'Fehler unbegrenzt' : max === 1 ? '1 Fehler erlaubt' : `${max} Fehler erlaubt`;
+    b.querySelector('.mi-sub').textContent = `${clues} Vorgaben · ${errors}`;
   }
   const canContinue = game && !game.over;
   const cont = $('menu-continue');

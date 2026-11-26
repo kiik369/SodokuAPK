@@ -39,9 +39,9 @@ test('canPlace und isPeer prüfen Zeile, Spalte und Block', () => {
   assert.equal(isPeer(0, 40), false);
 });
 
-function newGame(settings = {}) {
+function newGame(settings = {}, difficulty = 'EASY') {
   const get = (k) => ({ inputMode: 'cell', autoAdvance: 'off', autoNotes: true, maxMistakes: 0, hintLimit: 0, hintMode: 'fill', ...settings })[k];
-  const g = Game.create('EASY', 40, get, seededRandom(42));
+  const g = Game.create(difficulty, DIFFICULTIES[difficulty].clues, get, seededRandom(42));
   const empty = g.values.findIndex((v) => v === 0);
   return { g, empty };
 }
@@ -101,15 +101,47 @@ test('Tipp füllt das gewählte Feld und respektiert das Limit', () => {
   assert.equal(g.values[next], 0);
 });
 
-test('Fehlerlimit beendet das Spiel, Rückgängig setzt es fort', () => {
-  const { g, empty } = newGame({ maxMistakes: 1 });
-  g.select(empty);
-  g.inputDigit(g.solution[empty] === 9 ? 1 : g.solution[empty] + 1);
+/** Macht n Fehler in verschiedenen leeren Feldern. */
+function makeMistakes(g, n) {
+  const empties = g.values.map((v, i) => i).filter((i) => g.values[i] === 0);
+  for (const i of empties.slice(0, n)) {
+    g.select(i);
+    g.inputDigit(g.solution[i] === 9 ? 1 : g.solution[i] + 1);
+  }
+}
+
+test('Fehlerlimit je Schwierigkeit: Leicht 5, Mittel 3, Schwer 1', () => {
+  for (const [key, max] of [['EASY', 5], ['MEDIUM', 3], ['HARD', 1]]) {
+    const { g } = newGame({ maxMistakes: 0 }, key);
+    assert.equal(g.mistakeLimit(), max);
+    makeMistakes(g, max - 1);
+    assert.equal(g.failed, false, `${key}: ${max - 1} Fehler sind noch erlaubt`);
+    makeMistakes(g, 1);
+    assert.equal(g.failed, true, `${key}: beim ${max}. Fehler ist Schluss`);
+    assert.equal(g.mistakes, max);
+  }
+});
+
+test('Nach zu vielen Fehlern hilft kein Rückgängig und keine Eingabe', () => {
+  const { g } = newGame({}, 'HARD');
+  makeMistakes(g, 1);
   assert.ok(g.failed);
-  g.inputDigit(g.solution[empty]);
-  assert.notEqual(g.values[empty], g.solution[empty], 'nach Spielende keine Eingabe');
+  const values = g.values.slice();
   g.undo();
-  assert.equal(g.failed, false);
+  assert.ok(g.failed);
+  assert.deepEqual(g.values, values);
+  const empty = g.values.findIndex((v) => v === 0);
+  g.select(empty);
+  g.inputDigit(g.solution[empty]);
+  assert.equal(g.values[empty], 0);
+});
+
+test('Bei „Eigene“ gilt das eingestellte Limit', () => {
+  const { g } = newGame({ maxMistakes: 2 }, 'CUSTOM');
+  assert.equal(g.mistakeLimit(), 2);
+  const unlimited = newGame({ maxMistakes: 0 }, 'CUSTOM').g;
+  makeMistakes(unlimited, 8);
+  assert.equal(unlimited.failed, false);
 });
 
 test('Ziffer-zuerst-Modus und Weiterspringen', () => {

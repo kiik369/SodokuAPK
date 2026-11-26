@@ -1,11 +1,12 @@
 // Spiellogik der Web-Version. Entspricht SudokuGenerator.kt und GameViewModel.kt der App.
 // Index im Raster: row * 9 + col, 0 = leer.
 
+// maxMistakes: erlaubte Fehler, danach ist das Spiel verloren (null = Einstellung „maxMistakes“)
 export const DIFFICULTIES = {
-  EASY: { label: 'Leicht', clues: 40 },
-  MEDIUM: { label: 'Mittel', clues: 32 },
-  HARD: { label: 'Schwer', clues: 26 },
-  CUSTOM: { label: 'Eigene', clues: 34 },
+  EASY: { label: 'Leicht', clues: 40, maxMistakes: 5 },
+  MEDIUM: { label: 'Mittel', clues: 32, maxMistakes: 3 },
+  HARD: { label: 'Schwer', clues: 26, maxMistakes: 1 },
+  CUSTOM: { label: 'Eigene', clues: 34, maxMistakes: null },
 };
 
 /** Kleiner, reproduzierbarer Zufallsgenerator (für Tests mit festem Startwert). */
@@ -115,7 +116,7 @@ export const GAME_DEFAULTS = {
   inputMode: 'cell', // 'cell' | 'digit'
   autoAdvance: 'off', // 'off' | 'next' | 'correct'
   autoNotes: true,
-  maxMistakes: 0, // 0 = unbegrenzt
+  maxMistakes: 0, // nur bei „Eigene“; 0 = unbegrenzt
   hintLimit: 0, // 0 = unbegrenzt
   hintMode: 'fill', // 'fill' | 'show'
 };
@@ -169,6 +170,12 @@ export class Game {
 
   count(d) {
     return this.values.filter((v) => v === d).length;
+  }
+
+  /** Erlaubte Fehler für dieses Spiel (0 = unbegrenzt). */
+  mistakeLimit() {
+    const fixed = DIFFICULTIES[this.difficulty]?.maxMistakes;
+    return fixed ?? (Number(this.settings('maxMistakes')) || 0);
   }
 
   get over() {
@@ -227,7 +234,7 @@ export class Game {
 
     const right = d === this.solution[sel];
     if (!right && !wasSame) this.mistakes++;
-    const max = Number(this.settings('maxMistakes')) || 0;
+    const max = this.mistakeLimit();
     this.failed = max > 0 && this.mistakes >= max;
     this.completed = this.values.every((v, i) => v === this.solution[i]);
 
@@ -247,6 +254,7 @@ export class Game {
   }
 
   undo() {
+    if (this.failed) return; // verloren: nur Neustart
     const last = this.history.pop();
     if (!last) return;
     this.values = last.values;

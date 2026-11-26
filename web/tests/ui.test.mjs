@@ -161,12 +161,15 @@ test('Schwierigkeit wechseln mit Rückfrage', async () => {
   await context.close();
 });
 
-test('Fehlerlimit über die Einstellungen', async () => {
+test('Fehlerzähler und Limit: Schwer erlaubt 1 Fehler, dann Neustart', async () => {
   const { page, context } = await open();
-  await page.getByTestId('settings').click();
-  const slider = page.getByTestId('set-maxMistakes');
-  await slider.fill('1');
-  await page.getByRole('button', { name: 'Fertig' }).click();
+  await page.getByText('Fehler: 0 von 5').waitFor();
+
+  await page.getByTestId('menu-button').click();
+  assert.match(await page.getByTestId('menu-HARD').textContent(), /1 Fehler erlaubt/);
+  await page.getByTestId('menu-HARD').click();
+  await page.waitForFunction(() => window.sudoku.game?.difficulty === 'HARD' && !window.sudoku.loading);
+  await page.getByText('Fehler: 0 von 1').waitFor();
 
   const g = await game(page);
   const i = firstEmpty(g);
@@ -174,8 +177,12 @@ test('Fehlerlimit über die Einstellungen', async () => {
   await key(page, wrongDigit(g, i)).click();
   const dialog = page.getByTestId('result-dialog');
   await dialog.getByText('Zu viele Fehler.').waitFor();
-  await dialog.getByRole('button', { name: 'Zug zurück' }).click();
-  assert.equal((await game(page)).failed, false);
+  await page.screenshot({ path: join(SHOTS, '10-zu-viele-fehler.png') });
+  assert.equal(await dialog.getByRole('button', { name: 'Zug zurück' }).count(), 0, 'kein Zurück mehr');
+
+  await dialog.getByRole('button', { name: 'Neues Spiel' }).click();
+  await page.waitForFunction(() => !window.sudoku.loading && !window.sudoku.game.failed && window.sudoku.game.mistakes === 0);
+  assert.equal((await game(page)).difficulty, 'HARD');
   await context.close();
 });
 
