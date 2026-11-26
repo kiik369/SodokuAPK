@@ -17,6 +17,7 @@
       </div>
       <div class="header-right">
         <div class="clock" id="clock" data-testid="clock" aria-label="Spielzeit">⏱ 00:00</div>
+        <button class="round" id="open-menu" data-testid="menu-button" aria-label="Menü">☰</button>
         <button class="round" id="open-settings" data-testid="settings" aria-label="Einstellungen">⚙</button>
       </div>
     </header>
@@ -46,6 +47,21 @@
     <p class="help">Tastatur: Ziffern 1–9, Pfeiltasten, Entf/Rücktaste löscht, N Notizen, Z zurück, H Tipp</p>
   </main>
 
+  <section class="menu" id="menu" data-testid="menu" hidden aria-label="Startmenü">
+    <div class="menu-inner">
+      <div class="menu-brand">
+        <div class="mark big" id="menu-mark" aria-hidden="true"></div>
+        <div class="menu-word">sudoku</div>
+      </div>
+      <button class="menu-continue" id="menu-continue" data-testid="menu-continue" hidden>
+        <span class="mc-title">Weiterspielen</span>
+        <span class="mc-sub" id="menu-continue-sub"></span>
+      </button>
+      <div class="caption">Neues Spiel</div>
+      <div class="menu-list" id="menu-list"></div>
+    </div>
+  </section>
+
   <dialog id="confirm" data-testid="confirm-dialog">
     <h2>Neues Spiel starten?</h2>
     <p>Der aktuelle Fortschritt geht verloren.</p>
@@ -59,6 +75,7 @@
     <h2 id="result-title"></h2>
     <p id="result-text"></p>
     <div class="dialog-actions">
+      <button class="text-btn" id="result-menu">Menü</button>
       <button class="text-btn" id="result-undo">Zug zurück</button>
       <button class="text-btn strong" id="result-new">Neues Spiel</button>
     </div>

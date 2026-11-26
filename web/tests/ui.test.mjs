@@ -38,7 +38,7 @@ after(async () => {
   server?.close();
 });
 
-/** Neue Seite mit leerem Speicher; wartet, bis ein Rätsel da ist. */
+/** Neue Seite mit leerem Speicher; wählt im Startmenü „Leicht“ und wartet, bis das Rätsel da ist. */
 async function open(options = {}) {
   const context = await browser.newContext({ viewport: { width: 412, height: 915 }, ...options });
   const page = await context.newPage();
@@ -46,6 +46,7 @@ async function open(options = {}) {
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   await page.goto(url);
+  await page.getByTestId('menu-EASY').click();
   await page.waitForFunction(() => window.sudoku?.game && !window.sudoku.loading);
   return { page, context, errors };
 }
@@ -134,6 +135,9 @@ test('Ganzes Rätsel lösen zeigt „Geschafft.“', async () => {
       await key(page, g.solution[i]).click();
     }
   }
+  assert.equal(await page.evaluate(() => window.sudoku.celebrating), true, 'große Welle läuft');
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: join(SHOTS, '3a-siegeswelle.png') });
   const dialog = page.getByTestId('result-dialog');
   await dialog.getByText('Geschafft.').waitFor();
   await page.screenshot({ path: join(SHOTS, '3-geschafft.png') });
@@ -186,6 +190,7 @@ test('Einstellungen: Ziffernfeld 3×3 und Dunkelmodus bleiben nach Neuladen', as
   assert.match(await page.locator('#pad').getAttribute('class'), /grid/);
   const before = await game(page);
   await page.reload();
+  await page.getByTestId('menu-continue').click();
   await page.waitForFunction(() => window.sudoku?.game && !window.sudoku.loading);
   assert.match(await page.locator('#pad').getAttribute('class'), /grid/);
   assert.equal(await page.evaluate(() => document.documentElement.style.colorScheme), 'dark');
@@ -199,5 +204,87 @@ test('Kleines Handy-Display ohne horizontales Scrollen', async () => {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   assert.ok(overflow <= 0, `Seite ist ${overflow}px zu breit`);
   await page.screenshot({ path: join(SHOTS, '6-klein.png'), fullPage: true });
+  await context.close();
+});
+
+test('Startmenü: erst Schwierigkeit wählen, später weiterspielen', async () => {
+  const context = await browser.newContext({ viewport: { width: 412, height: 915 } });
+  const page = await context.newPage();
+  await page.goto(url);
+  const menu = page.getByTestId('menu');
+  await menu.waitFor();
+  assert.equal(await page.getByTestId('menu-continue').isVisible(), false, 'ohne Spielstand kein Weiterspielen');
+  await page.screenshot({ path: join(SHOTS, '7-menu.png') });
+
+  await page.getByTestId('menu-MEDIUM').click();
+  await page.waitForFunction(() => window.sudoku.game?.difficulty === 'MEDIUM' && !window.sudoku.loading);
+  assert.equal(await menu.isVisible(), false);
+
+  // Ein Zug, dann zurück ins Menü und weiterspielen
+  let g = await game(page);
+  const i = firstEmpty(g);
+  await cell(page, i).click();
+  await key(page, g.solution[i]).click();
+  await page.getByTestId('menu-button').click();
+  await menu.waitFor();
+  assert.match(await page.getByTestId('menu-continue').textContent(), /Mittel/);
+  await page.screenshot({ path: join(SHOTS, '8-menu-weiter.png') });
+  await page.getByTestId('menu-continue').click();
+  g = await game(page);
+  assert.equal(g.values[i], g.solution[i], 'Spielstand bleibt erhalten');
+
+  // Neues Spiel aus dem Menü ersetzt das laufende
+  await page.getByTestId('menu-button').click();
+  await page.getByTestId('menu-HARD').click();
+  await page.waitForFunction(() => window.sudoku.game?.difficulty === 'HARD' && !window.sudoku.loading);
+  await context.close();
+});
+
+test('Welle, wenn eine Zeile fertig wird', async () => {
+  const { page, context } = await open();
+  const g = await game(page);
+  // Zeile mit den wenigsten offenen Feldern bis auf eins füllen
+  const rows = [...Array(9)].map((_, r) => [...Array(9)].map((_, c) => r * 9 + c).filter((i) => g.values[i] === 0));
+  const row = rows.filter((r) => r.length > 0).sort((a, b) => a.length - b.length)[0];
+  for (const i of row.slice(0, -1)) {
+    await cell(page, i).click();
+    await key(page, g.solution[i]).click();
+  }
+  const last = row[row.length - 1];
+  await cell(page, last).click();
+  await key(page, g.solution[last]).click();
+  // Alle 9 Felder der Zeile laufen gerade eine Animation
+  const r = Math.floor(last / 9);
+  const animated = await page.evaluate((r) => [...Array(9)].filter((_, c) =>
+    document.querySelector(`[data-testid="cell-${r * 9 + c}"]`).getAnimations({ subtree: true }).length > 0).length, r);
+  assert.equal(animated, 9);
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: join(SHOTS, '9-welle.png') });
+  await context.close();
+});
+
+test('Falsche Ziffer wackelt', async () => {
+  const { page, context } = await open();
+  const g = await game(page);
+  const i = firstEmpty(g);
+  await cell(page, i).click();
+  await key(page, wrongDigit(g, i)).click();
+  const moving = await page.evaluate((i) => document.querySelector(`[data-testid="cell-${i}"]`)
+    .getAnimations().some((a) => JSON.stringify(a.effect.getKeyframes()).includes('translateX')), i);
+  assert.ok(moving);
+  await context.close();
+});
+
+test('Ohne Animationen (Bewegung reduzieren) kommt „Geschafft.“ sofort', async () => {
+  const { page, context } = await open({ reducedMotion: 'reduce' });
+  const g = await game(page);
+  for (let i = 0; i < 81; i++) {
+    if (g.givens[i] === 0) {
+      await cell(page, i).click();
+      await key(page, g.solution[i]).click();
+    }
+  }
+  assert.equal(await page.evaluate(() => window.sudoku.celebrating), false);
+  await page.getByTestId('result-dialog').getByText('Geschafft.').waitFor({ timeout: 1000 });
   await context.close();
 });

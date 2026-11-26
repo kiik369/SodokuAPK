@@ -90,6 +90,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--user); outl
   font-size: 5.6cqi; font-weight: 600; line-height: 1;
   font-variant-numeric: tabular-nums;
 }
+.cell::after {
+  content: ""; position: absolute; inset: 0; background: var(--user);
+  opacity: 0; pointer-events: none;
+}
 .cell.given { color: var(--ink); font-weight: 750; }
 .cell.peer { background: linear-gradient(var(--peer), var(--peer)), var(--tile); }
 .cell.same { background: linear-gradient(var(--same), var(--same)), var(--tile); box-shadow: inset 0 0 0 2px var(--ring); }
@@ -202,3 +206,38 @@ input[type="range"] { width: 100%; margin-top: 10px; accent-color: var(--user); 
   .key { font-size: 22px; }
   .word { font-size: 26px; }
 }
+
+/* ---------- Startmenü ---------- */
+.menu {
+  position: fixed; inset: 0; z-index: 10; overflow-y: auto;
+  background: var(--ground);
+  display: flex; align-items: center; justify-content: center;
+  padding: max(24px, env(safe-area-inset-top)) 16px 24px;
+  animation: menu-in 0.25s ease-out;
+}
+.menu[hidden] { display: none; }
+@keyframes menu-in { from { opacity: 0; transform: translateY(12px); } }
+.menu-inner { width: 100%; max-width: 360px; }
+.menu-brand { display: flex; flex-direction: column; align-items: center; gap: 14px; margin-bottom: 28px; }
+.mark.big { grid-template-columns: repeat(3, 22px); gap: 5px; }
+.mark.big span { width: 22px; height: 22px; border-radius: 7px; }
+.menu-word { font-size: 44px; font-weight: 800; letter-spacing: -1.5px; }
+.menu-continue {
+  width: 100%; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 16px; border: 0; border-radius: 18px; background: var(--accent); color: var(--on-accent);
+}
+.menu-continue[hidden] { display: none; }
+.mc-title { font-size: 18px; font-weight: 700; }
+.mc-sub { font-size: 13px; opacity: 0.8; }
+.menu-list { display: flex; flex-direction: column; gap: 8px; }
+.menu-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 16px 18px; border-radius: 16px; border: 1px solid var(--edge);
+  background: var(--surface); text-align: left; transition: transform 0.1s;
+}
+.menu-item:active { transform: scale(0.98); }
+.menu-item .mi-title { font-size: 17px; font-weight: 700; }
+.menu-item .mi-sub { font-size: 13px; color: var(--ink2); }
+.menu-item .mi-dots { display: flex; gap: 4px; }
+.menu-item .mi-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--edge); }
+.menu-item .mi-dots i.on { background: var(--user); }

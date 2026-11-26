@@ -16,7 +16,7 @@ Die Web-Version liegt in `web/` und wird bei jedem Push auf `main` automatisch g
 
 **https://kiik369.github.io/SodokuAPK/**
 
-Sie hat dieselbe Spiellogik und dasselbe Design wie die App sowie die wichtigsten Einstellungen. Der Spielstand bleibt im Browser gespeichert. Mit der Tastatur: Ziffern 1–9, Pfeiltasten, Entf/Rücktaste löscht, N Notizen, Z zurück, H Tipp.
+Sie hat dieselbe Spiellogik und dasselbe Design wie die App sowie die wichtigsten Einstellungen. Zusätzlich gibt es ein Startmenü zur Wahl der Schwierigkeit und Animationen (Welle bei fertiger Zeile, Spalte oder Block, große Welle beim Sieg, Aufploppen und Wackeln bei Eingaben). Der Spielstand bleibt im Browser gespeichert. Mit der Tastatur: Ziffern 1–9, Pfeiltasten, Entf/Rücktaste löscht, N Notizen, Z zurück, H Tipp.
 
 Lokal starten (ohne Installation):
 

@@ -51,7 +51,6 @@ const CATEGORIES = [
   },
   {
     title: 'Spiel', defs: [
-      c('startDiff', 'Schwierigkeit beim Start', 'EASY', [['EASY', 'Leicht'], ['MEDIUM', 'Mittel'], ['HARD', 'Schwer'], ['CUSTOM', 'Eigene']]),
       s('customClues', 'Vorgaben bei „Eigene“', 34, 22, 50, 1, '', 'Weniger Vorgaben sind schwerer'),
       t('pauseHidden', 'Uhr pausiert im Hintergrund', true),
       t('pauseSettings', 'Uhr pausiert in den Einstellungen', true),
@@ -149,8 +148,9 @@ const el = (tag, props = {}, ...children) => {
   return e;
 };
 
-const markEl = $('mark');
-BOX_HUES.forEach((h) => markEl.append(el('span', { style: `background:${ok(0.76, 0.13, h)}` })));
+for (const id of ['mark', 'menu-mark']) {
+  BOX_HUES.forEach((h) => $(id).append(el('span', { style: `background:${ok(0.76, 0.13, h)}` })));
+}
 
 const segEl = $('seg');
 const segButtons = Object.entries(DIFFICULTIES).map(([key, d]) => {
@@ -174,7 +174,7 @@ for (let b = 0; b < 9; b++) {
     const cell = el('button', { className: 'cell', role: 'gridcell' });
     cell.dataset.testid = `cell-${i}`;
     cell.dataset.index = i;
-    cell.addEventListener('click', () => act((g) => g.select(i)));
+    cell.addEventListener('click', () => act((g) => g.select(i), true));
     cells[i] = cell;
     box.append(cell);
   }
@@ -189,10 +189,11 @@ const TOOLS = [
 ];
 const toolButtons = {};
 for (const [id, glyph, label, fn] of TOOLS) {
+  const animate = id === 'hint';
   const b = el('button', { className: 'tool' }, el('span', { className: 'g', textContent: glyph }), el('span', { className: 'l', textContent: label }));
   b.dataset.testid = `tool-${id}`;
   b.setAttribute('aria-label', label);
-  b.addEventListener('click', () => act(fn));
+  b.addEventListener('click', () => act(fn, animate));
   toolButtons[id] = b;
 }
 
@@ -203,7 +204,7 @@ for (let d = 1; d <= 9; d++) {
   const k = el('button', { className: 'key' }, el('span', { textContent: String(d) }), el('span', { className: 'bar' }, bar));
   k.dataset.testid = `key-${d}`;
   k.setAttribute('aria-label', `Ziffer ${d}`);
-  k.addEventListener('click', () => act((g) => g.onKey(d)));
+  k.addEventListener('click', () => act((g) => g.onKey(d), true));
   keys.push({ k, bar });
   padEl.append(k);
 }
@@ -216,6 +217,8 @@ let elapsed = 0;
 let startedAt = 0;
 let running = false;
 let resultShownFor = null;
+let menuOpen = false;
+let celebrating = false;
 
 function saveGame() {
   if (game) store.set('sudoku-game', { game: game.toJSON(), elapsed: currentElapsed() });
@@ -236,6 +239,7 @@ function resumeTimer() {
   if (running || loading || !game || game.over) return;
   if (document.hidden && setting('pauseHidden')) return;
   if ($('settings').open && setting('pauseSettings')) return;
+  if (menuOpen) return;
   startedAt = performance.now();
   running = true;
 }
@@ -246,6 +250,8 @@ function formatTime(ms) {
 }
 
 function newGame(difficulty) {
+  hideMenu();
+  celebrating = false;
   loading = true;
   pauseTimer();
   elapsed = 0;
@@ -262,12 +268,100 @@ function newGame(difficulty) {
   }, 30);
 }
 
-function act(fn) {
-  if (!game || loading) return;
+function act(fn, animate = false) {
+  if (!game || loading || celebrating) return;
+  const before = game.values.slice();
+  const wasCompleted = game.completed;
   fn(game);
   if (game.over) pauseTimer(); else resumeTimer();
+  if (animate && game.completed && !wasCompleted && motionOK()) celebrating = true;
   saveGame();
   render();
+  if (animate) animateChanges(before, wasCompleted);
+}
+
+// ---------- Animationen ----------
+
+const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+const motionOK = () => !motionQuery.matches;
+
+const rowOf = (i) => Math.floor(i / 9);
+const colOf = (i) => i % 9;
+const boxOf = (i) => Math.floor(rowOf(i) / 3) * 3 + Math.floor(colOf(i) / 3);
+const UNITS = [
+  (i) => [...Array(9)].map((_, k) => rowOf(i) * 9 + k),
+  (i) => [...Array(9)].map((_, k) => k * 9 + colOf(i)),
+  (i) => [...Array(9)].map((_, k) => (Math.floor(boxOf(i) / 3) * 3 + Math.floor(k / 3)) * 9 + (boxOf(i) % 3) * 3 + (k % 3)),
+];
+const unitSolved = (values, unit) => unit.every((j) => values[j] === game.solution[j]);
+const dist = (a, b) => Math.hypot(rowOf(a) - rowOf(b), colOf(a) - colOf(b));
+
+/** Lichtblitz über ein Feld, der sich ausbreitet: Verzögerung je nach Abstand. */
+function flash(i, delay, strength = 0.5, duration = 520) {
+  cells[i].animate(
+    [{ opacity: 0 }, { opacity: strength, offset: 0.35 }, { opacity: 0 }],
+    { duration, delay, easing: 'ease-out', pseudoElement: '::after' },
+  );
+  cells[i].animate(
+    [{ transform: 'scale(1)' }, { transform: 'scale(1.12)', offset: 0.35 }, { transform: 'scale(1)' }],
+    { duration, delay, easing: 'ease-out' },
+  );
+}
+
+function pop(i) {
+  cells[i].animate(
+    [{ transform: 'scale(0.7)' }, { transform: 'scale(1.12)', offset: 0.6 }, { transform: 'scale(1)' }],
+    { duration: 220, easing: 'ease-out' },
+  );
+}
+
+function shake(i) {
+  cells[i].animate(
+    [0, -5, 5, -4, 4, -2, 0].map((x) => ({ transform: `translateX(${x}px)` })),
+    { duration: 360, easing: 'ease-in-out' },
+  );
+}
+
+function animateChanges(before, wasCompleted) {
+  if (!motionOK()) return;
+  const changed = [];
+  for (let i = 0; i < 81; i++) if (before[i] !== game.values[i] && game.values[i] !== 0) changed.push(i);
+
+  for (const i of changed) {
+    if (game.values[i] !== game.solution[i]) {
+      if (game.showErrors && game.isWrong(i, setting('errMode') === 'rules')) shake(i);
+      continue;
+    }
+    pop(i);
+    if (game.completed && !wasCompleted) continue; // große Welle übernimmt
+    const waved = new Set();
+    for (const unitOf of UNITS) {
+      const unit = unitOf(i);
+      if (unitSolved(game.values, unit) && !unitSolved(before, unit)) {
+        for (const j of unit) {
+          if (waved.has(j)) continue;
+          waved.add(j);
+          flash(j, 60 + dist(i, j) * 55);
+        }
+      }
+    }
+  }
+
+  if (game.completed && !wasCompleted) {
+    const from = changed[changed.length - 1] ?? 40;
+    let maxDelay = 0;
+    for (let j = 0; j < 81; j++) {
+      const d = 120 + dist(from, j) * 70;
+      maxDelay = Math.max(maxDelay, d);
+      flash(j, d, 0.6, 650);
+    }
+    // Zweite, sanftere Welle zurück
+    for (let j = 0; j < 81; j++) flash(j, maxDelay + 250 + (maxDelay - dist(from, j) * 70) * 0.5, 0.3, 600);
+    setTimeout(() => {
+      celebrating = false;
+      render();
+    }, maxDelay * 1.6 + 900);
+  }
 }
 
 // ---------- Darstellung ----------
@@ -368,6 +462,7 @@ function showResultIfNeeded() {
     resultShownFor = null;
     return;
   }
+  if (celebrating) return;
   if (resultShownFor === state && dlg.open) return;
   resultShownFor = state;
   if (state === 'done') {
@@ -408,6 +503,56 @@ $('result-undo').addEventListener('click', () => {
   act((g) => g.undo());
 });
 $('result').addEventListener('cancel', (e) => e.preventDefault());
+$('result-menu').addEventListener('click', () => {
+  $('result').close();
+  showMenu();
+});
+
+// ---------- Startmenü ----------
+
+const LEVEL_DOTS = { EASY: 1, MEDIUM: 2, HARD: 3, CUSTOM: 0 };
+const menuList = $('menu-list');
+for (const [key, d] of Object.entries(DIFFICULTIES)) {
+  const dots = el('span', { className: 'mi-dots' });
+  for (let n = 0; n < 3; n++) dots.append(el('i', { className: n < LEVEL_DOTS[key] ? 'on' : '' }));
+  const sub = el('span', { className: 'mi-sub' });
+  const b = el('button', { className: 'menu-item' },
+    el('span', {}, el('div', { className: 'mi-title', textContent: d.label }), sub),
+    key === 'CUSTOM' ? el('span', { className: 'mi-sub', textContent: 'einstellbar' }) : dots);
+  b.dataset.testid = `menu-${key}`;
+  b.dataset.key = key;
+  b.addEventListener('click', () => newGame(key));
+  menuList.append(b);
+}
+
+function showMenu() {
+  menuOpen = true;
+  pauseTimer();
+  saveGame();
+  for (const b of menuList.children) {
+    const key = b.dataset.key;
+    const clues = key === 'CUSTOM' ? Number(setting('customClues')) : DIFFICULTIES[key].clues;
+    b.querySelector('.mi-sub').textContent = `${clues} Vorgaben`;
+  }
+  const canContinue = game && !game.over;
+  const cont = $('menu-continue');
+  cont.hidden = !canContinue;
+  if (canContinue) {
+    $('menu-continue-sub').textContent = `${DIFFICULTIES[game.difficulty].label} · ${formatTime(elapsed)} · noch ${game.open} offen`;
+  }
+  $('menu').hidden = false;
+  (canContinue ? cont : menuList.firstElementChild).focus();
+}
+
+function hideMenu() {
+  if (!menuOpen) return;
+  menuOpen = false;
+  $('menu').hidden = true;
+  resumeTimer();
+}
+
+$('menu-continue').addEventListener('click', hideMenu);
+$('open-menu').addEventListener('click', showMenu);
 $('show-errors').addEventListener('change', () => act((g) => { g.showErrors = !g.showErrors; }));
 
 // ---------- Einstellungen ----------
@@ -488,10 +633,14 @@ $('settings').addEventListener('click', (e) => {
 // ---------- Tastatur ----------
 
 document.addEventListener('keydown', (e) => {
-  if (!game || document.querySelector('dialog[open]') || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (menuOpen && e.key === 'Escape' && game && !game.over) {
+    hideMenu();
+    return;
+  }
+  if (!game || menuOpen || document.querySelector('dialog[open]') || e.ctrlKey || e.metaKey || e.altKey) return;
   const k = e.key;
   if (/^[1-9]$/.test(k)) {
-    act((g) => g.onKey(Number(k)));
+    act((g) => g.onKey(Number(k)), true);
   } else if (k === 'Backspace' || k === 'Delete' || k === '0') {
     act((g) => g.erase());
   } else if (k.startsWith('Arrow')) {
@@ -508,7 +657,7 @@ document.addEventListener('keydown', (e) => {
   } else if (k === 'z' || k === 'Z') {
     act((g) => g.undo());
   } else if (k === 'h' || k === 'H') {
-    act((g) => g.hint());
+    act((g) => g.hint(), true);
   } else {
     return;
   }
@@ -526,19 +675,21 @@ darkQuery.addEventListener('change', render);
 
 const saved = store.get('sudoku-game');
 try {
-  if (!saved) throw new Error('kein Spielstand');
-  game = Game.fromJSON(saved.game, setting);
-  elapsed = Number(saved.elapsed) || 0;
-  render();
-  resumeTimer();
+  if (saved) {
+    game = Game.fromJSON(saved.game, setting);
+    elapsed = Number(saved.elapsed) || 0;
+  }
 } catch {
-  const start = setting('startDiff') in DIFFICULTIES ? setting('startDiff') : 'EASY';
-  newGame(start);
+  game = null;
 }
+render();
+showMenu();
 
 // Für automatische Tests: Zugriff auf den Spielstand (z. B. die Lösung)
 window.sudoku = {
   get game() { return game; },
   get loading() { return loading; },
+  get menuOpen() { return menuOpen; },
+  get celebrating() { return celebrating; },
   newGame,
 };
