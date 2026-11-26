@@ -9,3 +9,7 @@ build/
 .cxx
 *.apk
 *.aab
+
+# Web
+web/node_modules/
+web/tests/screenshots/

@@ -10,6 +10,24 @@ Einfache Sudoku-App für Android (Kotlin + Jetpack Compose).
 - Fehleranzeige zuschaltbar
 - Hell- und Dunkelmodus nach Systemeinstellung
 
+## Im Browser spielen
+
+Die Web-Version liegt in `web/` und wird bei jedem Push auf `main` automatisch getestet und veröffentlicht:
+
+**https://kiik369.github.io/SodokuAPK/**
+
+Sie hat dieselbe Spiellogik und dasselbe Design wie die App sowie die wichtigsten Einstellungen. Der Spielstand bleibt im Browser gespeichert. Mit der Tastatur: Ziffern 1–9, Pfeiltasten, Entf/Rücktaste löscht, N Notizen, Z zurück, H Tipp.
+
+Lokal starten (ohne Installation):
+
+```bash
+cd web && python3 -m http.server 8080
+```
+
+Dann http://localhost:8080 öffnen. Tests: `npm install`, dann `npm test` (Logik) und `npm run test:ui` (Browser mit Playwright).
+
+Die Web-Version ist ein eigener Code. Änderungen an der Spiellogik müssen in `web/sudoku.js` und in der App gemacht werden.
+
 ## APK bauen
 
 ### Mit GitHub Actions (ohne Android Studio)

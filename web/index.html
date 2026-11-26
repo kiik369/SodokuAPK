@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Sudoku</title>
+  <meta name="description" content="Web-Version der Sudoku-App zum Spielen und Testen im Browser.">
+  <meta name="theme-color" content="#f6f7fb">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app" id="app">
+    <header class="header">
+      <div class="brand">
+        <div class="mark" id="mark" aria-hidden="true"></div>
+        <span class="word" id="word">sudoku</span>
+      </div>
+      <div class="header-right">
+        <div class="clock" id="clock" data-testid="clock" aria-label="Spielzeit">⏱ 00:00</div>
+        <button class="round" id="open-settings" data-testid="settings" aria-label="Einstellungen">⚙</button>
+      </div>
+    </header>
+
+    <div class="seg" id="seg" role="tablist" aria-label="Schwierigkeit"></div>
+    <div class="tools above" id="tools-above"></div>
+
+    <div class="board-wrap">
+      <div class="board" id="board" data-testid="board" role="grid" aria-label="Sudoku-Brett"></div>
+      <div class="loading" id="loading" hidden><div class="spinner"></div></div>
+    </div>
+
+    <div class="meta">
+      <div>
+        <div id="open" data-testid="open"></div>
+        <div id="mistakes" data-testid="mistakes"></div>
+      </div>
+      <label class="switch-row">
+        <span>Fehler zeigen</span>
+        <input type="checkbox" class="switch" id="show-errors" data-testid="show-errors" checked>
+      </label>
+    </div>
+
+    <div class="tools" id="tools"></div>
+    <div class="pad" id="pad"></div>
+
+    <p class="help">Tastatur: Ziffern 1–9, Pfeiltasten, Entf/Rücktaste löscht, N Notizen, Z zurück, H Tipp</p>
+  </main>
+
+  <dialog id="confirm" data-testid="confirm-dialog">
+    <h2>Neues Spiel starten?</h2>
+    <p>Der aktuelle Fortschritt geht verloren.</p>
+    <div class="dialog-actions">
+      <button class="text-btn" value="cancel" id="confirm-cancel">Weiterspielen</button>
+      <button class="text-btn strong" value="ok" id="confirm-ok">Neues Spiel</button>
+    </div>
+  </dialog>
+
+  <dialog id="result" data-testid="result-dialog">
+    <h2 id="result-title"></h2>
+    <p id="result-text"></p>
+    <div class="dialog-actions">
+      <button class="text-btn" id="result-undo">Zug zurück</button>
+      <button class="text-btn strong" id="result-new">Neues Spiel</button>
+    </div>
+  </dialog>
+
+  <dialog id="settings" class="sheet" data-testid="settings-dialog">
+    <div class="sheet-head">
+      <div>
+        <h2>Anpassen</h2>
+        <div class="sub" id="settings-sub"></div>
+      </div>
+      <button class="text-btn strong" id="settings-done">Fertig</button>
+    </div>
+    <div class="sheet-body" id="settings-body"></div>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
