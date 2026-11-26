@@ -61,7 +61,7 @@ jobs:
       - name: Seite zusammenstellen
         run: |
           mkdir _site
-          cp web/index.html web/style.css web/app.js web/sudoku.js _site/
+          cp web/index.html web/style.css web/app.js web/sudoku.js web/icon.svg _site/
 
       - uses: actions/configure-pages@v5
 

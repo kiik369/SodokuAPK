@@ -2,6 +2,7 @@ package de.sudoku.app
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -72,6 +73,7 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         if (vm.settings.bool("pauseHidden")) vm.pauseTimer()
+        vm.save()
     }
 
     override fun onResume() {
@@ -116,9 +118,17 @@ fun SudokuScreen(vm: GameViewModel) {
     val buzz: () -> Unit = {
         if (s.bool("haptics")) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
     }
+    val boardFx = rememberBoardFx(vm)
+
+    // Zurück: im Spiel ins Menü, im Menü (mit laufendem Spiel) zurück ins Spiel
+    BackHandler(enabled = !vm.menuOpen || vm.canContinue) {
+        if (vm.menuOpen) vm.closeMenu() else vm.openMenu()
+    }
 
     MaterialTheme(colorScheme = look.colorScheme()) {
-        Surface(modifier = Modifier.fillMaxSize(), color = look.ground) {
+        if (vm.menuOpen) {
+            StartMenu(vm, look)
+        } else Surface(modifier = Modifier.fillMaxSize(), color = look.ground) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -128,7 +138,7 @@ fun SudokuScreen(vm: GameViewModel) {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Column(Modifier.widthIn(max = look.aw.dp).fillMaxWidth()) {
-                    Header(look, s, vm.elapsedMs, onSettings = { showSettings = true })
+                    Header(look, s, vm.elapsedMs, onMenu = { vm.openMenu() }, onSettings = { showSettings = true })
 
                     if (state == null) {
                         Box(Modifier.fillMaxWidth().padding(top = 80.dp), contentAlignment = Alignment.Center) {
@@ -146,7 +156,7 @@ fun SudokuScreen(vm: GameViewModel) {
                         }
                         Spacer(Modifier.height(14.dp))
                         Box(contentAlignment = Alignment.Center) {
-                            Board(state, look) { vm.select(it); buzz() }
+                            Board(state, look, boardFx) { vm.select(it); buzz() }
                             if (vm.loading) CircularProgressIndicator(color = look.user)
                         }
                         Meta(look, s, state) { vm.toggleErrors() }
@@ -180,16 +190,17 @@ fun SudokuScreen(vm: GameViewModel) {
             )
         }
 
-        if (state != null && state.completed) {
+        if (state != null && state.completed && !vm.celebrating && !vm.menuOpen) {
             AlertDialog(
                 onDismissRequest = {},
                 title = { Text("Geschafft.") },
                 text = { Text("Gelöst in ${formatTime(vm.elapsedMs, "mmss")} mit ${state.mistakes} Fehlern und ${state.hints} Tipps.") },
-                confirmButton = { TextButton(onClick = { vm.newGame(state.difficulty) }) { Text("Neues Spiel") } }
+                confirmButton = { TextButton(onClick = { vm.newGame(state.difficulty) }) { Text("Neues Spiel") } },
+                dismissButton = { TextButton(onClick = { vm.openMenu() }) { Text("Menü") } }
             )
         }
 
-        if (state != null && state.failed) {
+        if (state != null && state.failed && !vm.menuOpen) {
             AlertDialog(
                 onDismissRequest = {},
                 title = { Text("Zu viele Fehler.") },
@@ -202,7 +213,7 @@ fun SudokuScreen(vm: GameViewModel) {
 }
 
 @Composable
-fun Header(look: Look, s: Settings, elapsedMs: Long, onSettings: () -> Unit) {
+fun Header(look: Look, s: Settings, elapsedMs: Long, onMenu: () -> Unit, onSettings: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -251,6 +262,18 @@ fun Header(look: Look, s: Settings, elapsedMs: Long, onSettings: () -> Unit) {
                         fontWeight = FontWeight.SemiBold
                     )
                 }
+            }
+            Box(
+                Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(look.surface)
+                    .border(1.dp, look.edge, CircleShape)
+                    .testTag("menu_button")
+                    .clickable(onClick = onMenu),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("☰", color = look.ink2, fontSize = 20.sp)
             }
             Box(
                 Modifier
@@ -312,7 +335,7 @@ private fun isWrongValue(state: GameState, i: Int, rules: Boolean): Boolean {
 }
 
 @Composable
-fun Board(state: GameState, look: Look, onSelect: (Int) -> Unit) {
+fun Board(state: GameState, look: Look, fx: List<CellFx>, onSelect: (Int) -> Unit) {
     val shape = RoundedCornerShape(look.rb.dp)
     val elevation = when (look.shadow) {
         "soft" -> 8.dp
@@ -371,6 +394,7 @@ fun Board(state: GameState, look: Look, onSelect: (Int) -> Unit) {
                                             selectedValue = selectedValue,
                                             cellSize = cellSize,
                                             rules = rules,
+                                            fx = fx[i],
                                             modifier = Modifier
                                                 .weight(1f)
                                                 .fillMaxHeight(),
@@ -396,6 +420,7 @@ fun Cell(
     selectedValue: Int,
     cellSize: Dp,
     rules: Boolean,
+    fx: CellFx,
     modifier: Modifier,
     onClick: () -> Unit
 ) {
@@ -433,6 +458,7 @@ fun Cell(
     Box(
         modifier = modifier
             .testTag("cell_$index")
+            .cellFx(fx, look.user)
             .background(bg)
             .then(if (same) Modifier.border(2.dp, look.ring) else Modifier)
             .then(if (ringSel) Modifier.border(3.dp, look.user) else Modifier)

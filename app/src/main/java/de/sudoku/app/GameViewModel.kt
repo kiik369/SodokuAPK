@@ -1,6 +1,7 @@
 package de.sudoku.app
 
 import android.app.Application
+import android.content.Context
 import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -9,8 +10,14 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import kotlin.math.hypot
+import kotlin.math.max
 import kotlin.random.Random
 
 data class GameState(
@@ -29,11 +36,34 @@ data class GameState(
     val mistakes: Int = 0,
     /** Nur im Modus "Ziffer zuerst": die aktive Ziffer (0 = keine). */
     val activeDigit: Int = 0
-)
+) {
+    val over: Boolean get() = completed || failed
+}
+
+/** Ein Animationsschritt für ein Feld; die Oberfläche spielt ihn nach [delayMs] ab. */
+sealed interface BoardFx {
+    val cell: Int
+    val delayMs: Long
+
+    /** Ziffer ploppt beim Setzen auf. */
+    data class Pop(override val cell: Int, override val delayMs: Long = 0) : BoardFx
+
+    /** Falsche Ziffer wackelt. */
+    data class Shake(override val cell: Int, override val delayMs: Long = 0) : BoardFx
+
+    /** Lichtblitz als Teil einer Welle. */
+    data class Flash(
+        override val cell: Int,
+        override val delayMs: Long,
+        val strength: Float,
+        val durationMs: Int
+    ) : BoardFx
+}
 
 class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     val settings = Settings(app)
+    private val savePrefs = app.getSharedPreferences(SAVE_PREFS, Context.MODE_PRIVATE)
 
     var state by mutableStateOf<GameState?>(null)
         private set
@@ -44,8 +74,26 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     var elapsedMs by mutableLongStateOf(0L)
         private set
 
+    /** Startmenü sichtbar. Die App startet immer im Menü. */
+    var menuOpen by mutableStateOf(true)
+        private set
+
+    /** Läuft gerade die große Welle nach dem Lösen? Dann wartet der „Geschafft“-Dialog. */
+    var celebrating by mutableStateOf(false)
+        private set
+
     /** Wird von der Oberfläche gesetzt, solange die Einstellungen offen sind. */
     var holdTimer = false
+
+    /** Für Tests: Animationen erzwingen (true) oder abschalten (false), sonst Systemeinstellung. */
+    var motionOverride: Boolean? = null
+
+    /** Für Tests: die zuletzt ausgelösten Animationen. */
+    var lastEffects: List<BoardFx> = emptyList()
+        private set
+
+    private val _effects = MutableSharedFlow<List<BoardFx>>(extraBufferCapacity = 16)
+    val effects: SharedFlow<List<BoardFx>> = _effects
 
     private val history = ArrayDeque<Pair<List<Int>, List<Int>>>()
 
@@ -54,8 +102,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private var running = false
 
     init {
-        val start = runCatching { Difficulty.valueOf(settings.str("startDiff")) }.getOrDefault(Difficulty.EASY)
-        newGame(start)
+        load()
     }
 
     // ---------- Stoppuhr ----------
@@ -74,15 +121,33 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     fun resumeTimer() {
         val s = state ?: return
-        if (running || holdTimer || loading || s.completed || s.failed) return
+        if (running || holdTimer || loading || menuOpen || s.over) return
         startedAt = SystemClock.elapsedRealtime()
         running = true
     }
+
+    // ---------- Menü ----------
+
+    fun openMenu() {
+        menuOpen = true
+        pauseTimer()
+        save()
+    }
+
+    fun closeMenu() {
+        if (state == null || loading) return
+        menuOpen = false
+        resumeTimer()
+    }
+
+    val canContinue: Boolean get() = state?.over == false
 
     // ---------- Spiel ----------
 
     fun newGame(difficulty: Difficulty) {
         loading = true
+        menuOpen = false
+        celebrating = false
         pauseTimer()
         acc = 0L
         elapsedMs = 0L
@@ -100,6 +165,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 showErrors = settings.bool("showErrors")
             )
             loading = false
+            save()
             resumeTimer()
         }
     }
@@ -132,7 +198,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     fun inputDigit(d: Int) {
         val s = state ?: return
-        if (loading || s.failed || s.completed) return
+        if (loading || s.over) return
         val sel = s.selected
         if (sel < 0 || s.givens[sel] != 0) return
 
@@ -165,7 +231,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             if (adv == "next" || (adv == "correct" && right)) selected = nextEmpty(newValues, sel)
         }
 
-        state = s.copy(
+        val next = s.copy(
             values = newValues,
             notes = newNotes,
             selected = selected,
@@ -173,13 +239,16 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             failed = failed,
             completed = completed
         )
+        state = next
         if (completed || failed) pauseTimer()
+        emitEffects(s, next)
+        if (completed || failed) save()
     }
 
     fun erase() {
         val s = state ?: return
         val sel = s.selected
-        if (s.failed || s.completed || sel < 0 || s.givens[sel] != 0) return
+        if (s.over || sel < 0 || s.givens[sel] != 0) return
         if (s.values[sel] == 0 && s.notes[sel] == 0) return
         push(s)
         val newValues = s.values.toMutableList()
@@ -193,6 +262,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         val s = state ?: return
         val last = history.removeLastOrNull() ?: return
         state = s.copy(values = last.first, notes = last.second, completed = false, failed = false)
+        celebrating = false
         resumeTimer()
     }
 
@@ -205,7 +275,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     /** Füllt das markierte Feld mit der richtigen Ziffer (oder zeigt es nur); ohne Markierung das erste falsche Feld. */
     fun hint() {
         val s = state ?: return
-        if (s.completed || s.failed) return
+        if (s.over) return
         if (hintsLeft() == 0) return
         val target = when {
             s.selected >= 0 && s.givens[s.selected] == 0 && s.values[s.selected] != s.solution[s.selected] -> s.selected
@@ -223,14 +293,17 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         newNotes[target] = 0
         clearPeerNotes(newNotes, target, d)
         val completed = newValues == s.solution
-        state = s.copy(
+        val next = s.copy(
             values = newValues,
             notes = newNotes,
             selected = target,
             hints = s.hints + 1,
             completed = completed
         )
+        state = next
         if (completed) pauseTimer()
+        emitEffects(s, next)
+        if (completed) save()
     }
 
     private fun clearPeerNotes(notes: MutableList<Int>, from: Int, d: Int) {
@@ -257,5 +330,147 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private fun mutate(block: (GameState) -> GameState) {
         val s = state ?: return
         state = block(s)
+    }
+
+    // ---------- Animationen ----------
+
+    private fun motionEnabled(): Boolean {
+        motionOverride?.let { return it }
+        val scale = android.provider.Settings.Global.getFloat(
+            getApplication<Application>().contentResolver,
+            android.provider.Settings.Global.ANIMATOR_DURATION_SCALE,
+            1f
+        )
+        return scale > 0f
+    }
+
+    private fun isWrong(s: GameState, i: Int): Boolean {
+        val v = s.values[i]
+        if (v == 0 || s.givens[i] != 0) return false
+        if (settings.str("errMode") == "rules") {
+            return (0 until 81).any { j -> j != i && SudokuGenerator.isPeer(i, j) && s.values[j] == v }
+        }
+        return v != s.solution[i]
+    }
+
+    /** Vergleicht vorher/nachher und löst Aufploppen, Wackeln, Einheiten-Welle oder Siegeswelle aus. */
+    private fun emitEffects(before: GameState, after: GameState) {
+        if (!motionEnabled()) {
+            lastEffects = emptyList()
+            return
+        }
+        val fx = mutableListOf<BoardFx>()
+        val won = after.completed && !before.completed
+        val changed = (0 until 81).filter { before.values[it] != after.values[it] && after.values[it] != 0 }
+
+        for (i in changed) {
+            if (after.values[i] != after.solution[i]) {
+                if (after.showErrors && isWrong(after, i)) fx += BoardFx.Shake(i)
+                continue
+            }
+            fx += BoardFx.Pop(i)
+            if (won) continue // die große Welle übernimmt
+            val waved = mutableSetOf<Int>()
+            for (unit in unitsOf(i)) {
+                if (solved(after, unit) && !solved(before, unit)) {
+                    for (j in unit) {
+                        if (waved.add(j)) fx += BoardFx.Flash(j, (60 + dist(i, j) * 55).toLong(), 0.5f, 520)
+                    }
+                }
+            }
+        }
+
+        if (won) {
+            val from = changed.lastOrNull() ?: 40
+            var maxDelay = 0.0
+            for (j in 0 until 81) {
+                val d = 120 + dist(from, j) * 70
+                maxDelay = max(maxDelay, d)
+                fx += BoardFx.Flash(j, d.toLong(), 0.6f, 650)
+            }
+            // Zweite, sanftere Welle zurück
+            for (j in 0 until 81) {
+                val d = maxDelay + 250 + (maxDelay - dist(from, j) * 70) * 0.5
+                fx += BoardFx.Flash(j, d.toLong(), 0.3f, 600)
+            }
+            celebrating = true
+            viewModelScope.launch {
+                kotlinx.coroutines.delay((maxDelay * 1.6 + 900).toLong())
+                celebrating = false
+            }
+        }
+
+        lastEffects = fx
+        if (fx.isNotEmpty()) _effects.tryEmit(fx)
+    }
+
+    private fun unitsOf(i: Int): List<List<Int>> {
+        val r = i / 9
+        val c = i % 9
+        val br = r / 3 * 3
+        val bc = c / 3 * 3
+        return listOf(
+            List(9) { r * 9 + it },
+            List(9) { it * 9 + c },
+            List(9) { (br + it / 3) * 9 + bc + it % 3 }
+        )
+    }
+
+    private fun solved(s: GameState, unit: List<Int>) = unit.all { s.values[it] == s.solution[it] }
+
+    private fun dist(a: Int, b: Int) = hypot((a / 9 - b / 9).toDouble(), (a % 9 - b % 9).toDouble())
+
+    // ---------- Spielstand speichern ----------
+
+    /** Speichert das laufende Spiel, damit „Weiterspielen“ auch nach einem Neustart der App geht. */
+    fun save() {
+        val s = state ?: return
+        tick()
+        val json = JSONObject()
+            .put("difficulty", s.difficulty.name)
+            .put("givens", JSONArray(s.givens))
+            .put("solution", JSONArray(s.solution))
+            .put("values", JSONArray(s.values))
+            .put("notes", JSONArray(s.notes))
+            .put("showErrors", s.showErrors)
+            .put("completed", s.completed)
+            .put("failed", s.failed)
+            .put("hints", s.hints)
+            .put("mistakes", s.mistakes)
+            .put("elapsed", if (running) acc + (SystemClock.elapsedRealtime() - startedAt) else acc)
+        savePrefs.edit().putString(SAVE_KEY, json.toString()).apply()
+    }
+
+    private fun load() {
+        val raw = savePrefs.getString(SAVE_KEY, null) ?: return
+        runCatching {
+            val o = JSONObject(raw)
+            fun ints(key: String): List<Int> {
+                val a = o.getJSONArray(key)
+                require(a.length() == 81)
+                return List(81) { a.getInt(it) }
+            }
+            state = GameState(
+                difficulty = Difficulty.valueOf(o.getString("difficulty")),
+                givens = ints("givens"),
+                solution = ints("solution"),
+                values = ints("values"),
+                notes = ints("notes"),
+                showErrors = o.optBoolean("showErrors", true),
+                completed = o.optBoolean("completed"),
+                failed = o.optBoolean("failed"),
+                hints = o.optInt("hints"),
+                mistakes = o.optInt("mistakes")
+            )
+            acc = o.optLong("elapsed")
+            elapsedMs = acc
+        }.onFailure {
+            savePrefs.edit().remove(SAVE_KEY).apply()
+        }
+    }
+
+    companion object {
+        const val SAVE_PREFS = "sudoku-game"
+        const val SAVE_KEY = "game"
     }
 }

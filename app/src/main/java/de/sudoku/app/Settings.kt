@@ -145,8 +145,7 @@ val CATEGORIES: List<Category> = listOf(
         )
     ),
     Category(
-        "Spiel", "▶", "Start, Schwierigkeit, Pausen", listOf(
-            choice("startDiff", "Schwierigkeit beim Start", "EASY", listOf("EASY" to "Leicht", "MEDIUM" to "Mittel", "HARD" to "Schwer", "CUSTOM" to "Eigene")),
+        "Spiel", "▶", "Eigene Schwierigkeit, Pausen", listOf(
             slider("customClues", "Vorgaben bei „Eigene“", 34f, 22f, 50f, 1f, "", 1f, "Weniger Vorgaben sind schwerer"),
             toggle("pauseHidden", "Uhr pausiert im Hintergrund", true),
             toggle("pauseSettings", "Uhr pausiert in den Einstellungen", true)

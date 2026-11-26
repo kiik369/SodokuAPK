@@ -41,9 +41,18 @@ class GameUiTest {
     fun setUp() {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
         ctx.getSharedPreferences("sudoku-settings", Context.MODE_PRIVATE).edit().clear().commit()
+        ctx.getSharedPreferences(GameViewModel.SAVE_PREFS, Context.MODE_PRIVATE).edit().clear().commit()
+        launch()
+        // Animationen in den normalen Tests aus, damit Dialoge sofort erscheinen
+        vm.motionOverride = false
+        click("menu_EASY")
+        waitForGame()
+    }
+
+    private fun launch() {
         scenario = ActivityScenario.launch(MainActivity::class.java)
         scenario.onActivity { vm = ViewModelProvider(it)[GameViewModel::class.java] }
-        waitForGame()
+        rule.waitForIdle()
     }
 
     @After
@@ -54,7 +63,7 @@ class GameUiTest {
     // ---------- Hilfen ----------
 
     private fun waitForGame() {
-        rule.waitUntil(30_000) { vm.state != null && !vm.loading }
+        rule.waitUntil(30_000) { vm.state != null && !vm.loading && !vm.menuOpen }
         rule.waitForIdle()
     }
 
@@ -266,5 +275,98 @@ class GameUiTest {
         clickText("Nacht")
         assertEquals("dark", rule.runOnIdle { vm.settings.str("theme") })
         rule.onNodeWithText("Fertig").performClick()
+    }
+
+    // ---------- Startmenü ----------
+
+    @Test
+    fun startMenuChooseDifficultyAndContinue() {
+        // Ins Menü, dann neues Spiel „Mittel“
+        click("menu_button")
+        rule.onNodeWithTag("menu").assertIsDisplayed()
+        click("menu_MEDIUM")
+        rule.waitUntil(30_000) { vm.state?.difficulty == Difficulty.MEDIUM && !vm.loading }
+
+        val i = firstEmpty()
+        enter(i, state().solution[i])
+
+        click("menu_button")
+        rule.onNodeWithText("Weiterspielen").assertIsDisplayed()
+        rule.onNodeWithText("Mittel · ", substring = true).assertIsDisplayed()
+        click("menu_continue")
+        assertFalse(vm.menuOpen)
+        assertEquals(state().solution[i], state().values[i])
+    }
+
+    @Test
+    fun continueAfterAppRestart() {
+        val i = firstEmpty()
+        val d = state().solution[i]
+        enter(i, d)
+        val givens = state().givens
+
+        scenario.close()
+        launch()
+        rule.onNodeWithTag("menu").assertIsDisplayed()
+        click("menu_continue")
+        waitForGame()
+        assertEquals(givens, state().givens)
+        assertEquals(d, state().values[i])
+    }
+
+    @Test
+    fun backButtonOpensAndClosesMenu() {
+        scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        rule.waitForIdle()
+        assertTrue(vm.menuOpen)
+        rule.onNodeWithTag("menu").assertIsDisplayed()
+
+        scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        rule.waitForIdle()
+        assertFalse(vm.menuOpen)
+        rule.onNodeWithTag("cell_0").assertIsDisplayed()
+    }
+
+    // ---------- Animationen ----------
+
+    @Test
+    fun completingRowStartsWave() {
+        vm.motionOverride = true
+        val s = state()
+        val row = (0 until 9)
+            .map { r -> (0 until 9).map { r * 9 + it }.filter { s.values[it] == 0 } }
+            .filter { it.isNotEmpty() }
+            .minBy { it.size }
+        for (i in row) enter(i, s.solution[i])
+
+        val last = row.last()
+        val r = last / 9
+        val flashed = vm.lastEffects.filterIsInstance<BoardFx.Flash>().map { it.cell }.toSet()
+        assertTrue("Welle über die ganze Zeile", (0 until 9).all { r * 9 + it in flashed })
+        assertTrue(vm.lastEffects.any { it is BoardFx.Pop && it.cell == last })
+    }
+
+    @Test
+    fun wrongDigitShakes() {
+        vm.motionOverride = true
+        val i = firstEmpty()
+        enter(i, wrongDigit(i))
+        assertTrue(vm.lastEffects.any { it is BoardFx.Shake && it.cell == i })
+    }
+
+    @Test
+    fun victoryWaveThenCompletionDialog() {
+        vm.motionOverride = true
+        val s = state()
+        for (i in 0 until 81) {
+            if (s.givens[i] == 0) enter(i, s.solution[i])
+        }
+        assertTrue(state().completed)
+        assertTrue("große Welle läuft", vm.celebrating)
+        assertEquals(162, vm.lastEffects.count { it is BoardFx.Flash })
+        rule.onNodeWithText("Geschafft.").assertDoesNotExist()
+
+        rule.waitUntil(10_000) { !vm.celebrating }
+        rule.onNodeWithText("Geschafft.").assertIsDisplayed()
     }
 }
