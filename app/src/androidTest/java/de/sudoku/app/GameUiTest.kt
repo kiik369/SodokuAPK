@@ -1,6 +1,7 @@
 package de.sudoku.app
 
 import android.content.Context
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasText
